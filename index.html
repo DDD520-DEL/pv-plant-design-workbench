@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>光伏电站设计与校核工作台</title>
+    <link rel="stylesheet" href="./styles/main.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>光伏电站设计与校核工作台</h1>
+        <p class="subtitle">组串电气校核 · 阵列排布间距 · 发电量估算</p>
+      </div>
+      <div id="api-status" class="status status--pending">接口检测中…</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel panel--inputs">
+        <h2>设计输入</h2>
+        <form id="design-form" autocomplete="off">
+          <fieldset>
+            <legend>组件与逆变器</legend>
+            <label class="field">
+              <span>组件型号</span>
+              <select id="module-select"></select>
+            </label>
+            <label class="field">
+              <span>逆变器型号</span>
+              <select id="inverter-select"></select>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>每串组件数</span>
+                <input id="series-per-string" type="number" min="1" max="40" step="1" value="18" />
+              </label>
+              <label class="field">
+                <span>每路组串数</span>
+                <input id="strings-per-mppt" type="number" min="1" max="8" step="1" value="1" />
+              </label>
+              <label class="field">
+                <span>使用路数</span>
+                <input id="mppt-used" type="number" min="1" max="24" step="1" value="3" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>环境温度</legend>
+            <div class="field-row">
+              <label class="field">
+                <span>极端最低电池温度（℃）</span>
+                <input id="min-cell-temp" type="number" min="-40" max="30" step="1" value="-10" />
+              </label>
+              <label class="field">
+                <span>极端最高电池温度（℃）</span>
+                <input id="max-cell-temp" type="number" min="20" max="90" step="1" value="70" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>排布参数</legend>
+            <div class="field-row">
+              <label class="field">
+                <span>项目纬度（°）</span>
+                <input id="latitude" type="number" min="0" max="60" step="0.1" value="32" />
+              </label>
+              <label class="field">
+                <span>阵列倾角（°）</span>
+                <input id="tilt-deg" type="number" min="0" max="60" step="1" value="25" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>场地宽度（m）</span>
+                <input id="site-width" type="number" min="1" max="500" step="1" value="50" />
+              </label>
+              <label class="field">
+                <span>场地进深（m）</span>
+                <input id="site-depth" type="number" min="1" max="500" step="1" value="30" />
+              </label>
+              <label class="field">
+                <span>横向间隙（mm）</span>
+                <input id="gap-mm" type="number" min="0" max="200" step="5" value="20" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>发电量参数</legend>
+            <div class="field-row">
+              <label class="field">
+                <span>峰值日照小时数（h）</span>
+                <input id="peak-sun-hours" type="number" min="1" max="8" step="0.1" value="3.8" />
+              </label>
+              <label class="field">
+                <span>系统效率 PR</span>
+                <input id="performance-ratio" type="number" min="0.5" max="1" step="0.01" value="0.8" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>测算年限（年）</span>
+                <input id="years" type="number" min="1" max="30" step="1" value="25" />
+              </label>
+              <label class="field">
+                <span>首年衰减（%）</span>
+                <input id="first-year-degradation" type="number" min="0" max="10" step="0.1" value="2" />
+              </label>
+              <label class="field">
+                <span>逐年衰减（%）</span>
+                <input id="annual-degradation" type="number" min="0" max="3" step="0.05" value="0.55" />
+              </label>
+            </div>
+          </fieldset>
+        </form>
+
+        <div class="actions">
+          <button id="evaluate-button" type="button">开始校核</button>
+          <button id="reset-button" type="button" class="ghost">恢复默认</button>
+        </div>
+      </section>
+
+      <section class="panel panel--results">
+        <h2>校核结果</h2>
+        <p id="result-message" class="hint">填写左侧参数后点击「开始校核」。</p>
+        <article id="electric-panel" class="card" hidden></article>
+        <article id="layout-panel" class="card" hidden></article>
+        <article id="energy-panel" class="card" hidden></article>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
