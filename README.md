@@ -26,7 +26,7 @@ npm test
 - `test/pv-math.test.js`：温度修正、串联数区间、每路并联上限、八项电气校核判定
 - `test/cable-link.test.js`：电缆电压/电流自动取电气校核结果、手填覆盖与不一致判定
 - `test/cable.test.js`：回路电阻、直流压降与线损、2%/3% 两档判定、截面反推与标准规格上靠
-- `test/layout.test.js`：冬至日太阳高度角、阴影长度、排距、场地排布与容量
+- `test/layout.test.js`：冬至日太阳位置（高度角/方位角）、正午与 9:00–15:00 两种口径的阴影与排距、场地排布与容量
 - `test/yield.test.js`：首年发电量、逐年衰减、总发电量与等效利用小时
 - `test/economics.test.js`：初始投资、逐年净现金流、静态回收期插值、未回本、静态 LCOE
 - `test/catalog.test.js`：自定义库读写、组件与逆变器字段校验
@@ -67,7 +67,7 @@ test/                   单元测试与接口测试
 | POST | `/api/catalog/inverters` | 新增自定义逆变器 |
 | DELETE | `/api/catalog/inverters/:id` | 删除自定义逆变器；内置条目不可删除 |
 | POST | `/api/design/electric` | 组串电气校核，body 为 `{ moduleId, inverterId, seriesPerString, stringsPerMppt, mpptUsed, minCellTemp, maxCellTemp }` |
-| POST | `/api/design/layout` | 阵列排布与阴影间距，body 为 `{ moduleId, latitude, tiltDeg, siteWidthMm, siteDepthMm, gapMm }` |
+| POST | `/api/design/layout` | 阵列排布与阴影间距，body 为 `{ moduleId, latitude, tiltDeg, siteWidthMm, siteDepthMm, gapMm, shadingMode }`，`shadingMode` 取 `noon`（冬至日正午）或 `window`（冬至日 9:00–15:00），缺省 `noon` |
 | POST | `/api/design/energy` | 发电量估算，body 为 `{ capacityKw, peakSunHours, performanceRatio, years, firstYearDegradation, annualDegradation }` |
 | POST | `/api/design/economics` | 经济性分析，body 为发电量参数再加 `{ unitCostYuanPerW, omRatePercent, tariffYuanPerKwh }`，服务端按同一口径重算逐年发电量，返回现金流、静态回收期与 LCOE |
 | POST | `/api/design/cable` | 直流电缆选型，body 为 `{ cableLengthM, stringVoltage, stringCurrent, conductorMaterial, conductorArea, allowedDropPercent }`，材质取 `cu`/`al`，缺省铜芯 |
@@ -115,7 +115,9 @@ test/                   单元测试与接口测试
 计算；把输入框清空则重新跟随电气校核值，点「恢复默认」也会重置为自动跟随。联动只发生在
 前端（`src/cable-link.js`），`/api/design/cable` 接口的入参与口径不变。
 
-**排布与阴影**采用「冬至日正午不遮挡」口径：
+**排布与阴影**支持两种口径，可在页面「间距口径」下拉或接口参数 `shadingMode`（`noon` / `window`，缺省 `noon`）切换：
+
+1. 「冬至日正午不遮挡」（`noon`）：
 
 ```text
 太阳高度角 α = 90° − |纬度| − 23.45°
@@ -124,6 +126,19 @@ test/                   单元测试与接口测试
 排距 D = 组件长度 × cos(倾角) + s
 排数 = floor((场地进深 − 单排水平投影) / 排距) + 1
 ```
+
+2. 「冬至日 9:00–15:00 不遮挡」（`window`）：时段内最严苛的时刻是 9:00（与 15:00 关于正午对称），
+   按太阳时角 ω = ±45° 求太阳位置，阴影取南北向分量：
+
+```text
+sin α = sin φ · sin δ + cos φ · cos δ · cos ω        （φ 纬度，δ = −23.45°）
+cos A = (sin α · sin φ − sin δ) / (cos α · cos φ)    （A 为相对正南的方位角）
+排距 D = 组件长度 × cos(倾角) + h × cos A / tan α
+```
+
+该式与 GB 50797 的系数公式 `(0.707·tan φ + 0.4338) / (0.707 − 0.4338·tan φ)` 等价
+（系数为 cos 45° 与 tan 23.45° 的圆整）。时段口径排距更大，同场地可排排数与可装容量随之下降，
+发电量与经济性估算沿用的装机容量同步更新。
 
 **发电量**按首年发电量扣减首年衰减，此后按固定衰减率逐年递减：
 
@@ -161,7 +176,7 @@ LCOE = (初始投资 + 周期运维费总额) / 周期总发电量（元/kWh）
 
 ## 已知边界
 
-- 阴影计算只覆盖冬至日正午时刻，尚未支持 9:00–15:00 时段不遮挡、地形起伏与周边遮挡物。
+- 阴影计算支持冬至日正午与冬至日 9:00–15:00 两种不遮挡口径，尚未覆盖地形起伏与周边遮挡物。
 - 发电量估算使用单一峰值日照小时数与系统效率，不区分逐时辐照、温度损失与光谱修正。
 - 经济性为静态口径：不折现、不含税费、融资成本、保险与残值，运维费按初投固定费率取值，未考虑逆变器更换等大额中修支出。
 - 电气校核按「一台逆变器 + 若干路 MPPT」建模，暂不支持多台逆变器并联拓扑。

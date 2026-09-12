@@ -125,10 +125,47 @@ test('排布接口：返回排数、每排块数与装机容量', async () => {
     });
 
     assert.equal(status, 200);
+    assert.equal(payload.plan.shadingMode, 'noon');
     assert.equal(payload.plan.modulesPerRow, 43);
     assert.equal(payload.plan.rows, 8);
     assert.equal(payload.plan.totalModules, 344);
     assert.equal(payload.plan.capacityKw, 213.28);
+  });
+});
+
+test('排布接口：9:00–15:00 时段口径排距变大、容量下降', async () => {
+  await withServer(async (base) => {
+    const body = {
+      moduleId: 'mod-620',
+      latitude: 32,
+      tiltDeg: 25,
+      siteWidthMm: 50000,
+      siteDepthMm: 30000,
+      gapMm: 20
+    };
+    const noon = await post(base, '/api/design/layout', body);
+    const windowed = await post(base, '/api/design/layout', { ...body, shadingMode: 'window' });
+
+    assert.equal(windowed.status, 200);
+    assert.equal(windowed.payload.plan.shadingMode, 'window');
+    assert.ok(Math.abs(windowed.payload.plan.altitudeDeg - 19.83) < 0.01);
+    assert.ok(Math.abs(windowed.payload.plan.azimuthDeg - 43.6) < 0.05);
+    assert.ok(windowed.payload.plan.rowPitchMm > noon.payload.plan.rowPitchMm);
+    assert.equal(windowed.payload.plan.rows, 7);
+    assert.equal(windowed.payload.plan.totalModules, 301);
+    assert.equal(windowed.payload.plan.capacityKw, 186.62);
+  });
+});
+
+test('排布接口：非法间距口径返回 400', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/layout', {
+      moduleId: 'mod-620',
+      shadingMode: 'evening'
+    });
+
+    assert.equal(status, 400);
+    assert.ok(payload.error.includes('间距口径'));
   });
 });
 

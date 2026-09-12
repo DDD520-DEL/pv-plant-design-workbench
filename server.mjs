@@ -11,7 +11,7 @@ import {
 } from './src/catalogs.js';
 import { normalizeInverter, normalizeModule } from './src/catalog-schema.js';
 import { CELL_TEMP_LIMITS, STRING_LIMITS, evaluateElectric } from './src/pv-math.js';
-import { LAYOUT_LIMITS, arrayPlan } from './src/layout.js';
+import { LAYOUT_LIMITS, arrayPlan, resolveShadingMode } from './src/layout.js';
 import { ENERGY_LIMITS, energyEstimate } from './src/yield.js';
 import { ECONOMICS_LIMITS, evaluateEconomics } from './src/economics.js';
 import { CABLE_LIMITS, evaluateCable, resolveMaterial } from './src/cable.js';
@@ -130,8 +130,16 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
     const { values, errors } = resolveFields(body, LAYOUT_LIMITS);
     if (errors.length > 0) throw badRequest(errors.join('；'));
 
+    const shadingMode = resolveShadingMode(body.shadingMode ?? 'noon');
+    if (!shadingMode) {
+      throw badRequest(
+        `间距口径不支持：${String(body.shadingMode)}（仅支持 noon 冬至日正午 / window 冬至日 9:00–15:00）`
+      );
+    }
+
     const plan = arrayPlan({
       ...values,
+      shadingMode: shadingMode.id,
       moduleLengthMm: module.lengthMm,
       moduleWidthMm: module.widthMm,
       pmax: module.pmax

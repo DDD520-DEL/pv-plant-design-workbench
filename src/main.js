@@ -23,6 +23,7 @@ const DEFAULT_VALUES = {
   mpptUsed: 3,
   minCellTemp: -10,
   maxCellTemp: 70,
+  shadingMode: 'noon',
   latitude: 32,
   tiltDeg: 25,
   siteWidthM: 50,
@@ -52,6 +53,7 @@ const FIELDS = {
   mpptUsed: 'mppt-used',
   minCellTemp: 'min-cell-temp',
   maxCellTemp: 'max-cell-temp',
+  shadingMode: 'shading-mode',
   latitude: 'latitude',
   tiltDeg: 'tilt-deg',
   siteWidth: 'site-width',
@@ -125,6 +127,7 @@ function applyDefaults() {
   elements.mpptUsed.value = DEFAULT_VALUES.mpptUsed;
   elements.minCellTemp.value = DEFAULT_VALUES.minCellTemp;
   elements.maxCellTemp.value = DEFAULT_VALUES.maxCellTemp;
+  elements.shadingMode.value = DEFAULT_VALUES.shadingMode;
   elements.latitude.value = DEFAULT_VALUES.latitude;
   elements.tiltDeg.value = DEFAULT_VALUES.tiltDeg;
   elements.siteWidth.value = DEFAULT_VALUES.siteWidthM;
@@ -222,6 +225,7 @@ function collectInput() {
     mpptUsed: numberValue(elements.mpptUsed),
     minCellTemp: numberValue(elements.minCellTemp),
     maxCellTemp: numberValue(elements.maxCellTemp),
+    shadingMode: elements.shadingMode.value,
     latitude: numberValue(elements.latitude),
     tiltDeg: numberValue(elements.tiltDeg),
     siteWidthMm: numberValue(elements.siteWidth) * 1000,
@@ -274,6 +278,7 @@ async function runEvaluation() {
       }),
       postLayout({
         moduleId: input.moduleId,
+        shadingMode: input.shadingMode,
         latitude: input.latitude,
         tiltDeg: input.tiltDeg,
         siteWidthMm: input.siteWidthMm,

@@ -1,7 +1,10 @@
 /**
  * 阵列排布的俯视示意图：按算出的排数、每排组件数画方块。
  * 为了可读性，最多画 6 排、每排最多 24 块，超出部分用文字说明。
+ * 图注带上当前口径下的排距，切换间距口径时与排数、容量一起更新。
  */
+
+import { formatMmToM } from '../format.js';
 
 const MAX_ROWS = 6;
 const MAX_PER_ROW = 24;
@@ -44,7 +47,7 @@ export function arrayDiagramSvg(plan) {
     <svg class="array-diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="阵列排布俯视示意图">
       ${blocks.join('')}
     </svg>
-    <p class="diagram-caption">俯视示意：共 ${plan.rows} 排，每排 ${plan.modulesPerRow} 块，合计 ${plan.totalModules} 块</p>
+    <p class="diagram-caption">俯视示意：共 ${plan.rows} 排，每排 ${plan.modulesPerRow} 块，合计 ${plan.totalModules} 块，排距 ${formatMmToM(plan.rowPitchMm, 2)}</p>
     ${note}
   `;
 }
