@@ -1,5 +1,6 @@
 import { fetchCatalog, fetchHealth, postCable, postElectric, postEnergy, postLayout } from './api.js';
 import { setCatalog, setLastResult } from './state.js';
+import { buildCableLink, formatLinkedValue } from './cable-link.js';
 import { renderCablePanel } from './components/cable-panel.js';
 import { renderElectricPanel } from './components/electric-panel.js';
 import { renderEnergyPanel } from './components/energy-panel.js';
@@ -19,7 +20,7 @@ const DEFAULT_VALUES = {
   siteDepthM: 30,
   gapMm: 20,
   cableLengthM: 30,
-  cableVoltage: 626,
+  cableVoltage: 544.65,
   cableCurrent: 18.19,
   conductorMaterial: 'cu',
   conductorArea: 4,
@@ -59,12 +60,26 @@ const FIELDS = {
 
 const elements = {};
 
+/**
+ * 电缆电压/电流是否被手动改过：未改时点「开始校核」自动跟随电气校核结果；
+ * 一旦手动改过即以手填值覆盖，直到「恢复默认」才重新跟随。
+ */
+const cableManualTouched = { voltage: false, current: false };
+
+const CABLE_LINK_NAMES = {
+  voltage: { input: 'cableVoltage', tag: 'cableVoltageTag' },
+  current: { input: 'cableCurrent', tag: 'cableCurrentTag' }
+};
+
 function cacheElements() {
   for (const [key, id] of Object.entries(FIELDS)) {
     elements[key] = document.getElementById(id);
   }
   elements.apiStatus = document.getElementById('api-status');
   elements.message = document.getElementById('result-message');
+  elements.cableLinkNote = document.getElementById('cable-link-note');
+  elements.cableVoltageTag = document.getElementById('cable-voltage-tag');
+  elements.cableCurrentTag = document.getElementById('cable-current-tag');
   elements.evaluateButton = document.getElementById('evaluate-button');
   elements.resetButton = document.getElementById('reset-button');
   elements.panels = {
@@ -110,10 +125,73 @@ function applyDefaults() {
   elements.years.value = DEFAULT_VALUES.years;
   elements.firstYearDegradation.value = DEFAULT_VALUES.firstYearDegradation;
   elements.annualDegradation.value = DEFAULT_VALUES.annualDegradation;
+  resetCableLink();
+}
+
+/**
+ * 恢复电缆电压/电流的「自动跟随」状态：清掉手填标记，
+ * 由下一次「开始校核」按电气校核结果回填。
+ */
+function resetCableLink() {
+  cableManualTouched.voltage = false;
+  cableManualTouched.current = false;
+  setCableLinkNote(null);
+  for (const name of Object.keys(CABLE_LINK_NAMES)) {
+    paintCableField(name, { source: 'auto', mismatch: false });
+  }
+}
+
+const CABLE_TAG_TEXT = {
+  auto: '自动跟随',
+  manual: '手填覆盖',
+  mismatch: '手填 · 与电气校核不一致'
+};
+
+function setCableLinkNote(text) {
+  if (!text) {
+    elements.cableLinkNote.hidden = true;
+    elements.cableLinkNote.textContent = '';
+    return;
+  }
+  elements.cableLinkNote.hidden = false;
+  elements.cableLinkNote.textContent = text;
+  elements.cableLinkNote.className = 'hint hint--warn field-note';
+}
+
+function paintCableField(name, { source, mismatch }) {
+  const refs = CABLE_LINK_NAMES[name];
+  const input = elements[refs.input];
+  const tag = elements[refs.tag];
+  const state = source === 'manual' ? (mismatch ? 'mismatch' : 'manual') : 'auto';
+  input.classList.toggle('input--auto', state === 'auto');
+  input.classList.toggle('input--override', state === 'manual');
+  input.classList.toggle('input--mismatch', state === 'mismatch');
+  tag.textContent = CABLE_TAG_TEXT[state];
+  tag.className = `field-tag field-tag--${state}`;
+}
+
+/**
+ * 把电气校核 → 电缆的联动结果落到界面：
+ * 自动值回填未手改的输入框；手填值保留并按一致性给出标记与提示。
+ */
+function applyCableLink(link) {
+  for (const [name, resolved] of Object.entries(link.fields)) {
+    const refs = CABLE_LINK_NAMES[name];
+    if (resolved.source === 'auto') {
+      elements[refs.input].value = formatLinkedValue(resolved.auto);
+    }
+    paintCableField(name, resolved);
+  }
+  setCableLinkNote(link.notice);
 }
 
 function numberValue(element) {
   return Number(element.value);
+}
+
+/** 联动输入框留空时给 NaN（Number('') 会得到 0），交由联动逻辑回退到自动值。 */
+function optionalNumberValue(element) {
+  return element.value.trim() === '' ? Number.NaN : Number(element.value);
 }
 
 function collectInput() {
@@ -131,8 +209,8 @@ function collectInput() {
     siteDepthMm: numberValue(elements.siteDepth) * 1000,
     gapMm: numberValue(elements.gapMm),
     cableLengthM: numberValue(elements.cableLength),
-    stringVoltage: numberValue(elements.cableVoltage),
-    stringCurrent: numberValue(elements.cableCurrent),
+    cableVoltageManual: optionalNumberValue(elements.cableVoltage),
+    cableCurrentManual: optionalNumberValue(elements.cableCurrent),
     conductorMaterial: elements.conductorMaterial.value,
     conductorArea: numberValue(elements.conductorArea),
     allowedDropPercent: numberValue(elements.allowedDrop),
@@ -157,9 +235,12 @@ async function runEvaluation() {
   const input = collectInput();
   elements.evaluateButton.disabled = true;
   setMessage('正在计算…');
+  setCableLinkNote(null);
 
   try {
-    const [electric, cable, layout] = await Promise.all([
+    // 电气校核与排布互不依赖，可并发；电缆电压/电流要取自电气校核结果，
+    // 必须等电气校核返回后再发。
+    const [electric, layout] = await Promise.all([
       postElectric({
         moduleId: input.moduleId,
         inverterId: input.inverterId,
@@ -168,14 +249,6 @@ async function runEvaluation() {
         mpptUsed: input.mpptUsed,
         minCellTemp: input.minCellTemp,
         maxCellTemp: input.maxCellTemp
-      }),
-      postCable({
-        cableLengthM: input.cableLengthM,
-        stringVoltage: input.stringVoltage,
-        stringCurrent: input.stringCurrent,
-        conductorMaterial: input.conductorMaterial,
-        conductorArea: input.conductorArea,
-        allowedDropPercent: input.allowedDropPercent
       }),
       postLayout({
         moduleId: input.moduleId,
@@ -188,8 +261,24 @@ async function runEvaluation() {
     ]);
 
     renderElectricPanel(elements.panels.electric, electric);
-    renderCablePanel(elements.panels.cable, cable);
     renderLayoutPanel(elements.panels.layout, layout);
+
+    const link = buildCableLink({
+      metrics: electric.result.metrics,
+      manual: { voltage: input.cableVoltageManual, current: input.cableCurrentManual },
+      touched: cableManualTouched
+    });
+    applyCableLink(link);
+
+    const cable = await postCable({
+      cableLengthM: input.cableLengthM,
+      stringVoltage: link.values.stringVoltage,
+      stringCurrent: link.values.stringCurrent,
+      conductorMaterial: input.conductorMaterial,
+      conductorArea: input.conductorArea,
+      allowedDropPercent: input.allowedDropPercent
+    });
+    renderCablePanel(elements.panels.cable, cable, { link });
 
     const capacityKw = layout.plan.capacityKw > 0 ? layout.plan.capacityKw : electric.result.metrics.dcKw;
     const energy = await postEnergy({
@@ -203,9 +292,10 @@ async function runEvaluation() {
     renderEnergyPanel(elements.panels.energy, energy);
 
     setLastResult({ electric, cable, layout, energy });
+    const suffix = link.overrides.length > 0 ? ` 电缆电压/电流按手填值计算（${link.overrides.length} 项与电气校核不一致）。` : '';
     setMessage(
-      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW）。`,
-      'ok'
+      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW）。${suffix}`,
+      link.overrides.length > 0 ? 'warn' : 'ok'
     );
   } catch (error) {
     hidePanels();
@@ -246,6 +336,20 @@ async function bootstrap() {
   }
 
   elements.evaluateButton.addEventListener('click', runEvaluation);
+
+  // 用户手动编辑电压/电流即视为覆盖：保留手填值并加标记，
+  // 是否与电气校核一致要到下一次校核时才判定。
+  elements.cableVoltage.addEventListener('input', () => {
+    cableManualTouched.voltage = true;
+    paintCableField('voltage', { source: 'manual', mismatch: false });
+    setCableLinkNote(null);
+  });
+  elements.cableCurrent.addEventListener('input', () => {
+    cableManualTouched.current = true;
+    paintCableField('current', { source: 'manual', mismatch: false });
+    setCableLinkNote(null);
+  });
+
   elements.resetButton.addEventListener('click', () => {
     applyDefaults();
     elements.moduleSelect.value = DEFAULT_VALUES.moduleId;

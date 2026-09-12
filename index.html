@@ -89,6 +89,10 @@
 
           <fieldset>
             <legend>直流电缆（组串到逆变器）</legend>
+            <p class="fieldset-hint">
+              工作电压 / 电流默认自动取「组串高温工作电压」与「每路工作电流」，直接改输入框可手填覆盖；
+              与电气校核不一致时会给出提示。
+            </p>
             <div class="field-row">
               <label class="field">
                 <span>单程电缆长度（m）</span>
@@ -96,13 +100,16 @@
               </label>
               <label class="field">
                 <span>组串工作电压（V）</span>
-                <input id="cable-voltage" type="number" min="100" max="1500" step="1" value="626" />
+                <input id="cable-voltage" type="number" min="100" max="1500" step="1" value="544.65" />
+                <em id="cable-voltage-tag" class="field-tag field-tag--auto">自动跟随</em>
               </label>
               <label class="field">
                 <span>组串工作电流（A）</span>
                 <input id="cable-current" type="number" min="1" max="60" step="0.01" value="18.19" />
+                <em id="cable-current-tag" class="field-tag field-tag--auto">自动跟随</em>
               </label>
             </div>
+            <p id="cable-link-note" class="hint hint--warn field-note" hidden></p>
             <div class="field-row">
               <label class="field">
                 <span>导体材质</span>

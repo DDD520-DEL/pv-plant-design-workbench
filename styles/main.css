@@ -207,6 +207,67 @@ button.ghost:hover {
   color: var(--fail);
 }
 
+.hint--warn {
+  background: #fdf3e3;
+  border-color: #f0d6ab;
+  color: var(--warn);
+}
+
+.field-note {
+  margin: 2px 0 10px;
+  font-size: 12px;
+}
+
+.fieldset-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 电缆电压/电流的自动跟随 / 手填覆盖标记 */
+.field-tag {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.field-tag--auto {
+  background: var(--accent-soft);
+  border-color: #c7d7fb;
+  color: var(--accent);
+}
+
+.field-tag--manual {
+  background: #f4f6fa;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.field-tag--mismatch {
+  background: #fdf3e3;
+  border-color: #f0d6ab;
+  color: var(--warn);
+}
+
+input.input--auto {
+  border-color: #c7d7fb;
+  background: #f7faff;
+}
+
+input.input--override {
+  background: #fdfefe;
+}
+
+input.input--mismatch {
+  border-color: #f0d6ab;
+  background: #fffaf2;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -239,6 +300,20 @@ button.ghost:hover {
   margin: 12px 0 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.card__banner {
+  margin: 0 0 14px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+}
+
+.card__banner--warn {
+  background: #fdf3e3;
+  border-color: #f0d6ab;
+  color: var(--warn);
 }
 
 .badge {

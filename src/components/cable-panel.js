@@ -53,13 +53,26 @@ function candidateRow(item, isRecommended) {
   `;
 }
 
-export function renderCablePanel(container, { result }) {
+function linkBanner(link) {
+  if (!link?.notice) return '';
+  return `
+    <p class="card__banner card__banner--warn">${escapeHtml(link.notice)}</p>
+  `;
+}
+
+function sourceTag(source) {
+  if (source === 'manual') return '（手填覆盖）';
+  return '';
+}
+
+export function renderCablePanel(container, { result }, options = {}) {
   const { checks, recommendation } = result;
   const { rows, recommendedIndex } = nearbyCandidates(recommendation.candidates, recommendation.recommendedArea);
   const recommendedText =
     recommendation.recommendedArea != null
       ? `${formatNumber(recommendation.recommendedArea, recommendation.recommendedArea >= 10 ? 0 : 1)} mm²`
       : '标准系列内无解';
+  const link = options.link ?? null;
 
   container.hidden = false;
   container.innerHTML = `
@@ -72,10 +85,16 @@ export function renderCablePanel(container, { result }) {
         )} m（回路 ${formatNumber(result.loopLengthM, 1)} m）· ${formatNumber(
           result.area,
           result.area >= 10 ? 0 : 1
-        )} mm²</p>
+        )} mm² · 工作电压 ${formatNumber(result.voltage, 1)} V${escapeHtml(
+          sourceTag(link?.fields?.voltage?.source)
+        )} · 工作电流 ${formatNumber(result.current, 2)} A${escapeHtml(
+          sourceTag(link?.fields?.current?.source)
+        )}</p>
       </div>
       <span class="badge badge--${result.status}">${STATUS_TEXT[result.status]}</span>
     </header>
+
+    ${linkBanner(link)}
 
     <div class="metrics">
       ${metric('回路电阻', formatNumber(result.resistance, 4), 'Ω')}
