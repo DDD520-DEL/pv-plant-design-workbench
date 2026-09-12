@@ -1,5 +1,6 @@
-import { fetchCatalog, fetchHealth, postElectric, postEnergy, postLayout } from './api.js';
+import { fetchCatalog, fetchHealth, postCable, postElectric, postEnergy, postLayout } from './api.js';
 import { setCatalog, setLastResult } from './state.js';
+import { renderCablePanel } from './components/cable-panel.js';
 import { renderElectricPanel } from './components/electric-panel.js';
 import { renderEnergyPanel } from './components/energy-panel.js';
 import { renderLayoutPanel } from './components/layout-panel.js';
@@ -17,6 +18,12 @@ const DEFAULT_VALUES = {
   siteWidthM: 50,
   siteDepthM: 30,
   gapMm: 20,
+  cableLengthM: 30,
+  cableVoltage: 626,
+  cableCurrent: 18.19,
+  conductorMaterial: 'cu',
+  conductorArea: 4,
+  allowedDropPercent: 2,
   peakSunHours: 3.8,
   performanceRatio: 0.8,
   years: 25,
@@ -37,6 +44,12 @@ const FIELDS = {
   siteWidth: 'site-width',
   siteDepth: 'site-depth',
   gapMm: 'gap-mm',
+  cableLength: 'cable-length',
+  cableVoltage: 'cable-voltage',
+  cableCurrent: 'cable-current',
+  conductorMaterial: 'conductor-material',
+  conductorArea: 'conductor-area',
+  allowedDrop: 'allowed-drop',
   peakSunHours: 'peak-sun-hours',
   performanceRatio: 'performance-ratio',
   years: 'years',
@@ -56,6 +69,7 @@ function cacheElements() {
   elements.resetButton = document.getElementById('reset-button');
   elements.panels = {
     electric: document.getElementById('electric-panel'),
+    cable: document.getElementById('cable-panel'),
     layout: document.getElementById('layout-panel'),
     energy: document.getElementById('energy-panel')
   };
@@ -85,6 +99,12 @@ function applyDefaults() {
   elements.siteWidth.value = DEFAULT_VALUES.siteWidthM;
   elements.siteDepth.value = DEFAULT_VALUES.siteDepthM;
   elements.gapMm.value = DEFAULT_VALUES.gapMm;
+  elements.cableLength.value = DEFAULT_VALUES.cableLengthM;
+  elements.cableVoltage.value = DEFAULT_VALUES.cableVoltage;
+  elements.cableCurrent.value = DEFAULT_VALUES.cableCurrent;
+  elements.conductorMaterial.value = DEFAULT_VALUES.conductorMaterial;
+  elements.conductorArea.value = DEFAULT_VALUES.conductorArea;
+  elements.allowedDrop.value = DEFAULT_VALUES.allowedDropPercent;
   elements.peakSunHours.value = DEFAULT_VALUES.peakSunHours;
   elements.performanceRatio.value = DEFAULT_VALUES.performanceRatio;
   elements.years.value = DEFAULT_VALUES.years;
@@ -110,6 +130,12 @@ function collectInput() {
     siteWidthMm: numberValue(elements.siteWidth) * 1000,
     siteDepthMm: numberValue(elements.siteDepth) * 1000,
     gapMm: numberValue(elements.gapMm),
+    cableLengthM: numberValue(elements.cableLength),
+    stringVoltage: numberValue(elements.cableVoltage),
+    stringCurrent: numberValue(elements.cableCurrent),
+    conductorMaterial: elements.conductorMaterial.value,
+    conductorArea: numberValue(elements.conductorArea),
+    allowedDropPercent: numberValue(elements.allowedDrop),
     peakSunHours: numberValue(elements.peakSunHours),
     performanceRatio: numberValue(elements.performanceRatio),
     years: numberValue(elements.years),
@@ -133,7 +159,7 @@ async function runEvaluation() {
   setMessage('正在计算…');
 
   try {
-    const [electric, layout] = await Promise.all([
+    const [electric, cable, layout] = await Promise.all([
       postElectric({
         moduleId: input.moduleId,
         inverterId: input.inverterId,
@@ -142,6 +168,14 @@ async function runEvaluation() {
         mpptUsed: input.mpptUsed,
         minCellTemp: input.minCellTemp,
         maxCellTemp: input.maxCellTemp
+      }),
+      postCable({
+        cableLengthM: input.cableLengthM,
+        stringVoltage: input.stringVoltage,
+        stringCurrent: input.stringCurrent,
+        conductorMaterial: input.conductorMaterial,
+        conductorArea: input.conductorArea,
+        allowedDropPercent: input.allowedDropPercent
       }),
       postLayout({
         moduleId: input.moduleId,
@@ -154,6 +188,7 @@ async function runEvaluation() {
     ]);
 
     renderElectricPanel(elements.panels.electric, electric);
+    renderCablePanel(elements.panels.cable, cable);
     renderLayoutPanel(elements.panels.layout, layout);
 
     const capacityKw = layout.plan.capacityKw > 0 ? layout.plan.capacityKw : electric.result.metrics.dcKw;
@@ -167,9 +202,9 @@ async function runEvaluation() {
     });
     renderEnergyPanel(elements.panels.energy, energy);
 
-    setLastResult({ electric, layout, energy });
+    setLastResult({ electric, cable, layout, energy });
     setMessage(
-      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW）。`,
+      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW）。`,
       'ok'
     );
   } catch (error) {

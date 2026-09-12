@@ -10,7 +10,7 @@
     <header class="topbar">
       <div>
         <h1>光伏电站设计与校核工作台</h1>
-        <p class="subtitle">组串电气校核 · 阵列排布间距 · 发电量估算</p>
+        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 发电量估算</p>
       </div>
       <div id="api-status" class="status status--pending">接口检测中…</div>
     </header>
@@ -88,6 +88,59 @@
           </fieldset>
 
           <fieldset>
+            <legend>直流电缆（组串到逆变器）</legend>
+            <div class="field-row">
+              <label class="field">
+                <span>单程电缆长度（m）</span>
+                <input id="cable-length" type="number" min="1" max="500" step="1" value="30" />
+              </label>
+              <label class="field">
+                <span>组串工作电压（V）</span>
+                <input id="cable-voltage" type="number" min="100" max="1500" step="1" value="626" />
+              </label>
+              <label class="field">
+                <span>组串工作电流（A）</span>
+                <input id="cable-current" type="number" min="1" max="60" step="0.01" value="18.19" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>导体材质</span>
+                <select id="conductor-material">
+                  <option value="cu">铜芯（ρ≈0.0225）</option>
+                  <option value="al">铝芯（ρ≈0.0360）</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>导体截面积（mm²）</span>
+                <select id="conductor-area">
+                  <option value="1.5">1.5</option>
+                  <option value="2.5">2.5</option>
+                  <option value="4" selected>4</option>
+                  <option value="6">6</option>
+                  <option value="10">10</option>
+                  <option value="16">16</option>
+                  <option value="25">25</option>
+                  <option value="35">35</option>
+                  <option value="50">50</option>
+                  <option value="70">70</option>
+                  <option value="95">95</option>
+                  <option value="120">120</option>
+                  <option value="150">150</option>
+                  <option value="185">185</option>
+                  <option value="240">240</option>
+                  <option value="300">300</option>
+                  <option value="400">400</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>允许压降（%，用于反推截面）</span>
+                <input id="allowed-drop" type="number" min="0.1" max="10" step="0.1" value="2" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
             <legend>发电量参数</legend>
             <div class="field-row">
               <label class="field">
@@ -126,6 +179,7 @@
         <h2>校核结果</h2>
         <p id="result-message" class="hint">填写左侧参数后点击「开始校核」。</p>
         <article id="electric-panel" class="card" hidden></article>
+        <article id="cable-panel" class="card" hidden></article>
         <article id="layout-panel" class="card" hidden></article>
         <article id="energy-panel" class="card" hidden></article>
       </section>

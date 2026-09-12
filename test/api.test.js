@@ -132,6 +132,65 @@ test('排布接口：返回排数、每排块数与装机容量', async () => {
   });
 });
 
+test('电缆选型接口：返回压降、线损、两档判定与推荐截面', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/cable', {
+      cableLengthM: 30,
+      stringVoltage: 626,
+      stringCurrent: 18.19,
+      conductorMaterial: 'cu',
+      conductorArea: 4,
+      allowedDropPercent: 2
+    });
+
+    assert.equal(status, 200);
+    assert.equal(payload.result.status, 'pass');
+    assert.equal(payload.result.resistance, 0.3375);
+    assert.equal(payload.result.dropPercent, 0.981);
+    assert.equal(payload.result.lossWatt, 111.7);
+    assert.equal(payload.result.checks.drop2.pass, true);
+    assert.equal(payload.result.recommendation.recommendedArea, 2.5);
+  });
+});
+
+test('电缆选型接口：铝芯小截面判不通过，省略材质默认铜芯', async () => {
+  await withServer(async (base) => {
+    const fail = await post(base, '/api/design/cable', {
+      cableLengthM: 50,
+      stringVoltage: 600,
+      stringCurrent: 15,
+      conductorMaterial: 'al',
+      conductorArea: 2.5
+    });
+    assert.equal(fail.status, 200);
+    assert.equal(fail.payload.result.status, 'fail');
+    assert.equal(fail.payload.result.material, 'al');
+    assert.equal(fail.payload.result.checks.drop3.pass, false);
+
+    const defaults = await post(base, '/api/design/cable', {});
+    assert.equal(defaults.status, 200);
+    assert.equal(defaults.payload.result.material, 'cu');
+    assert.equal(defaults.payload.result.lengthM, 30);
+    assert.equal(defaults.payload.result.area, 4);
+  });
+});
+
+test('电缆选型接口：非法材质与越界参数返回 400', async () => {
+  await withServer(async (base) => {
+    const badMaterial = await post(base, '/api/design/cable', { conductorMaterial: 'gold' });
+    assert.equal(badMaterial.status, 400);
+    assert.ok(badMaterial.payload.error.includes('导体材质'));
+
+    const outOfRange = await post(base, '/api/design/cable', { cableLengthM: 0 });
+    assert.equal(outOfRange.status, 400);
+    assert.ok(outOfRange.payload.error.includes('单程电缆长度'));
+
+    const badVoltage = await post(base, '/api/design/cable', { stringVoltage: 50 });
+    assert.equal(badVoltage.status, 400);
+    assert.ok(badVoltage.payload.error.includes('组串工作电压'));
+  });
+});
+
 test('发电量接口：按容量与衰减返回逐年结果', async () => {
   await withServer(async (base) => {
     const { status, payload } = await post(base, '/api/design/energy', {

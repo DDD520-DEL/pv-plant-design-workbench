@@ -13,6 +13,7 @@ import { normalizeInverter, normalizeModule } from './src/catalog-schema.js';
 import { CELL_TEMP_LIMITS, STRING_LIMITS, evaluateElectric } from './src/pv-math.js';
 import { LAYOUT_LIMITS, arrayPlan } from './src/layout.js';
 import { ENERGY_LIMITS, energyEstimate } from './src/yield.js';
+import { CABLE_LIMITS, evaluateCable, resolveMaterial } from './src/cable.js';
 import { readCatalog, writeCatalog } from './src/store.js';
 import { resolveFields } from './src/validate.js';
 
@@ -148,6 +149,21 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
     sendJson(response, 200, { estimate: energyEstimate(values) });
   }
 
+  async function handleCable(request, response) {
+    const body = await readJsonBody(request);
+    const { values, errors } = resolveFields(body, CABLE_LIMITS);
+    if (errors.length > 0) throw badRequest(errors.join('；'));
+
+    const materialSpec = resolveMaterial(body.conductorMaterial ?? 'cu');
+    if (!materialSpec) {
+      throw badRequest(`导体材质不支持：${String(body.conductorMaterial)}（仅支持 cu 铜芯 / al 铝芯）`);
+    }
+
+    sendJson(response, 200, {
+      result: evaluateCable({ material: materialSpec.id, ...values })
+    });
+  }
+
   async function handleCreate(request, response, kind) {
     const body = await readJsonBody(request);
     const catalog = await readCatalog(dataFile);
@@ -210,6 +226,11 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
 
     if (pathname === '/api/design/energy' && method === 'POST') {
       await handleEnergy(request, response);
+      return true;
+    }
+
+    if (pathname === '/api/design/cable' && method === 'POST') {
+      await handleCable(request, response);
       return true;
     }
 
