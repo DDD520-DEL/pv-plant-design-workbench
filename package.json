@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "光伏电站设计与校核工作台：组串电气校核、直流电缆选型、阵列排布间距、发电量估算与经济性分析（前后端一体，零第三方依赖）",
+  "description": "光伏电站设计与校核工作台：组串电气校核、直流电缆选型、阵列排布间距、支架与基础选型、发电量估算与经济性分析（前后端一体，零第三方依赖）",
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test"

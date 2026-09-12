@@ -228,6 +228,76 @@ test('电缆选型接口：非法材质与越界参数返回 400', async () => {
   });
 });
 
+test('支架基础接口：返回风雪荷载、构件选型与稳定校核', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/structure', {
+      moduleId: 'mod-620',
+      windPressure: 0.4,
+      snowPressure: 0.4,
+      tiltDeg: 25,
+      arrayHeightMm: 500,
+      modulesAlongSlope: 2,
+      postSpacingMm: 2268,
+      soilType: 'silt'
+    });
+
+    assert.equal(status, 200);
+    assert.equal(payload.module.lengthMm, 2382);
+    assert.equal(payload.result.status, 'pass');
+    assert.equal(payload.result.loads.wind.standardKpa, 0.44);
+    assert.equal(payload.result.loads.snow.standardKpa, 0.4);
+    assert.equal(payload.result.post.size.label, '□80×80×3');
+    assert.equal(payload.result.purlin.size.model, 'C80×40×20×2.0');
+    assert.equal(payload.result.foundation.slab.sideMm, 1300);
+    assert.equal(payload.result.foundation.checks.overturning.pass, true);
+    assert.equal(payload.result.foundation.checks.sliding.pass, true);
+  });
+});
+
+test('支架基础接口：大风压黏性土抗滑移不满足时整体判 fail', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/structure', {
+      moduleId: 'mod-620',
+      windPressure: 1.2,
+      snowPressure: 0.8,
+      tiltDeg: 25,
+      arrayHeightMm: 500,
+      modulesAlongSlope: 2,
+      postSpacingMm: 2268,
+      soilType: 'clay'
+    });
+
+    assert.equal(status, 200);
+    assert.equal(payload.result.status, 'fail');
+    assert.equal(payload.result.foundation.checks.overturning.pass, true);
+    assert.equal(payload.result.foundation.checks.sliding.pass, false);
+  });
+});
+
+test('支架基础接口：土类别缺省按粉土砂土，未知组件/非法土类/越界参数返回 400', async () => {
+  await withServer(async (base) => {
+    const defaults = await post(base, '/api/design/structure', { moduleId: 'mod-620' });
+    assert.equal(defaults.status, 200);
+    assert.equal(defaults.payload.result.foundation.soil.id, 'silt');
+    assert.equal(defaults.payload.result.loads.wind.basicKpa, 0.4);
+
+    const unknown = await post(base, '/api/design/structure', { moduleId: 'mod-missing' });
+    assert.equal(unknown.status, 400);
+    assert.ok(unknown.payload.error.includes('未找到组件'));
+
+    const badSoil = await post(base, '/api/design/structure', { moduleId: 'mod-620', soilType: 'rock' });
+    assert.equal(badSoil.status, 400);
+    assert.ok(badSoil.payload.error.includes('地基土类别'));
+
+    const outOfRange = await post(base, '/api/design/structure', {
+      moduleId: 'mod-620',
+      windPressure: 3
+    });
+    assert.equal(outOfRange.status, 400);
+    assert.ok(outOfRange.payload.error.includes('基本风压'));
+  });
+});
+
 test('发电量接口：按容量与衰减返回逐年结果', async () => {
   await withServer(async (base) => {
     const { status, payload } = await post(base, '/api/design/energy', {

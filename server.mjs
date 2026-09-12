@@ -15,6 +15,7 @@ import { LAYOUT_LIMITS, arrayPlan, resolveShadingMode } from './src/layout.js';
 import { ENERGY_LIMITS, energyEstimate } from './src/yield.js';
 import { ECONOMICS_LIMITS, evaluateEconomics } from './src/economics.js';
 import { CABLE_LIMITS, evaluateCable, resolveMaterial } from './src/cable.js';
+import { STRUCTURE_LIMITS, evaluateStructure, resolveSoilType } from './src/structure.js';
 import { readCatalog, writeCatalog } from './src/store.js';
 import { resolveFields } from './src/validate.js';
 
@@ -192,6 +193,33 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
     });
   }
 
+  async function handleStructure(request, response) {
+    const body = await readJsonBody(request);
+    const catalog = await readCatalog(dataFile);
+    const module = pickModule(catalog, body.moduleId);
+    if (!module) throw badRequest(`未找到组件：${body.moduleId ?? '（空）'}`);
+
+    const { values, errors } = resolveFields(body, STRUCTURE_LIMITS);
+    if (errors.length > 0) throw badRequest(errors.join('；'));
+
+    const soilSpec = resolveSoilType(body.soilType ?? 'silt');
+    if (!soilSpec) {
+      throw badRequest(`地基土类别不支持：${String(body.soilType)}（仅支持 clay 黏性土 / silt 粉土砂土 / gravel 碎石土岩石）`);
+    }
+
+    const result = evaluateStructure({
+      ...values,
+      soilType: soilSpec.id,
+      moduleLengthMm: module.lengthMm
+    });
+    if (!result) throw badRequest('支架基础参数不完整或取值非法，无法完成计算');
+
+    sendJson(response, 200, {
+      module: { id: module.id, brand: module.brand, model: module.model, lengthMm: module.lengthMm },
+      result
+    });
+  }
+
   async function handleCreate(request, response, kind) {
     const body = await readJsonBody(request);
     const catalog = await readCatalog(dataFile);
@@ -264,6 +292,11 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
 
     if (pathname === '/api/design/cable' && method === 'POST') {
       await handleCable(request, response);
+      return true;
+    }
+
+    if (pathname === '/api/design/structure' && method === 'POST') {
+      await handleStructure(request, response);
       return true;
     }
 

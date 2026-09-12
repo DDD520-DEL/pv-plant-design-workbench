@@ -10,7 +10,7 @@
     <header class="topbar">
       <div>
         <h1>光伏电站设计与校核工作台</h1>
-        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 发电量估算 · 经济性分析</p>
+        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 支架与基础选型 · 发电量估算 · 经济性分析</p>
       </div>
       <div id="api-status" class="status status--pending">接口检测中…</div>
     </header>
@@ -90,6 +90,46 @@
               <label class="field">
                 <span>横向间隙（mm）</span>
                 <input id="gap-mm" type="number" min="0" max="200" step="5" value="20" />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>支架与基础</legend>
+            <p class="fieldset-hint">
+              倾角复用上方「阵列倾角」；立柱纵向跨距常用 2 倍组件短边宽度（620W 组件约 2268 mm）。
+              风压/雪压按项目所在地《建筑结构荷载规范》50 年一遇取值。
+            </p>
+            <div class="field-row">
+              <label class="field">
+                <span>基本风压 w0（kN/m²）</span>
+                <input id="wind-pressure" type="number" min="0.2" max="1.5" step="0.05" value="0.4" />
+              </label>
+              <label class="field">
+                <span>基本雪压 s0（kN/m²）</span>
+                <input id="snow-pressure" type="number" min="0" max="1.5" step="0.05" value="0.4" />
+              </label>
+              <label class="field">
+                <span>阵列下沿高度（mm）</span>
+                <input id="array-height" type="number" min="200" max="6000" step="50" value="500" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>沿斜向组件数（块）</span>
+                <input id="modules-along-slope" type="number" min="1" max="6" step="1" value="2" />
+              </label>
+              <label class="field">
+                <span>立柱纵向跨距（mm）</span>
+                <input id="post-spacing" type="number" min="1000" max="6000" step="10" value="2268" />
+              </label>
+              <label class="field">
+                <span>地基土类别</span>
+                <select id="soil-type">
+                  <option value="clay">黏性土（可塑，μ=0.30）</option>
+                  <option value="silt" selected>粉土/砂土（稍湿，μ=0.40）</option>
+                  <option value="gravel">碎石土/岩石（μ=0.50）</option>
+                </select>
               </label>
             </div>
           </fieldset>
@@ -216,6 +256,7 @@
         <article id="electric-panel" class="card" hidden></article>
         <article id="cable-panel" class="card" hidden></article>
         <article id="layout-panel" class="card" hidden></article>
+        <article id="structure-panel" class="card" hidden></article>
         <article id="energy-panel" class="card" hidden></article>
         <article id="economics-panel" class="card" hidden></article>
       </section>

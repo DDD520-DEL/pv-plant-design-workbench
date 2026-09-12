@@ -1,7 +1,8 @@
 # 光伏电站设计与校核工作台
 
 一个前后端一体的光伏电站设计辅助工具：组串电气校核、直流电缆选型与压降校核、阵列排布与阴影间距计算、
-发电量估算与经济性分析（逐年现金流、静态回收期、平准化度电成本），配上可扩展的组件库与逆变器库。
+支架与基础选型（风/雪荷载、立柱檩条规格、抗倾覆抗滑移）、发电量估算与经济性分析（逐年现金流、静态回收期、
+平准化度电成本），配上可扩展的组件库与逆变器库。
 
 项目**不依赖任何第三方 npm 包**，全部使用 Node 内置能力（`node:http`、`node:fs`、`node:test`），
 clone 后即可直接运行和测试。
@@ -27,10 +28,11 @@ npm test
 - `test/cable-link.test.js`：电缆电压/电流自动取电气校核结果、手填覆盖与不一致判定
 - `test/cable.test.js`：回路电阻、直流压降与线损、2%/3% 两档判定、截面反推与标准规格上靠
 - `test/layout.test.js`：冬至日太阳位置（高度角/方位角）、正午与 9:00–15:00 两种口径的阴影与排距、场地排布与容量
+- `test/structure.test.js`：风/雪荷载系数、断面几何、立柱与檩条选型、基础底板反算、抗倾覆/抗滑移校核与土质影响
 - `test/yield.test.js`：首年发电量、逐年衰减、总发电量与等效利用小时
 - `test/economics.test.js`：初始投资、逐年净现金流、静态回收期插值、未回本、静态 LCOE
 - `test/catalog.test.js`：自定义库读写、组件与逆变器字段校验
-- `test/api.test.js`：启动真实 HTTP 服务，验证健康检查、目录增删、五类设计计算与错误处理
+- `test/api.test.js`：启动真实 HTTP 服务，验证健康检查、目录增删、六类设计计算与错误处理
 
 ## 目录结构
 
@@ -42,6 +44,7 @@ src/pv-math.js          组串电气校核核心计算
 src/cable-link.js       电气校核 → 电缆电压/电流联动（自动跟随、手填覆盖）
 src/cable.js            直流电缆压降、线损与截面反推
 src/layout.js           阵列排布与阴影间距
+src/structure.js        风/雪荷载、立柱檩条选型与基础抗倾覆抗滑移
 src/yield.js            发电量估算
 src/economics.js        经济性分析（逐年现金流、静态回收期、LCOE）
 src/catalogs.js         内置组件库与逆变器库
@@ -71,6 +74,7 @@ test/                   单元测试与接口测试
 | POST | `/api/design/energy` | 发电量估算，body 为 `{ capacityKw, peakSunHours, performanceRatio, years, firstYearDegradation, annualDegradation }` |
 | POST | `/api/design/economics` | 经济性分析，body 为发电量参数再加 `{ unitCostYuanPerW, omRatePercent, tariffYuanPerKwh }`，服务端按同一口径重算逐年发电量，返回现金流、静态回收期与 LCOE |
 | POST | `/api/design/cable` | 直流电缆选型，body 为 `{ cableLengthM, stringVoltage, stringCurrent, conductorMaterial, conductorArea, allowedDropPercent }`，材质取 `cu`/`al`，缺省铜芯 |
+| POST | `/api/design/structure` | 支架与基础选型，body 为 `{ moduleId, windPressure, snowPressure, tiltDeg, arrayHeightMm, modulesAlongSlope, postSpacingMm, soilType }`，土类别取 `clay`/`silt`/`gravel`，缺省 `silt`；返回风/雪荷载标准值、立柱与檩条建议规格、基础底板尺寸与抗倾覆/抗滑移校核 |
 
 所有 POST 接口在参数缺失时按默认值处理，参数越界、组件或逆变器不存在、使用路数超过 MPPT 路数等情况返回 `400` 与中文错误说明。
 
@@ -140,6 +144,23 @@ cos A = (sin α · sin φ − sin δ) / (cos α · cos φ)    （A 为相对正�
 （系数为 cos 45° 与 tan 23.45° 的圆整）。时段口径排距更大，同场地可排排数与可装容量随之下降，
 发电量与经济性估算沿用的装机容量同步更新。
 
+**支架与基础选型**按固定支架一个断面（前/后立柱 + 檩条 + 独立基础）做初设包络计算：
+
+```text
+风荷载标准值  w_k = βz·μs·μz·w0         （βz=1.0；μs=0.9+0.008θ 包络；μz 按 B 类、10m 以下取 1.0）
+断面风荷载    Fw = w_k × 斜长 × 立柱纵向跨距，水平分量 Fw·cosθ、上拔分量 Fw·sinθ
+雪荷载标准值  s_k = μr·s0               （θ≤25° 取 1.0，其后每度减 0.01，封底 0.6）
+断面雪荷载    S = s_k × 斜面水平投影面积
+立柱          两根分担风水平力，按 M = Fh/2 × 合力点高度 反算截面模量 W，上靠 Q235 方矩管
+檩条          简支梁 M = qL²/8（L=立柱纵向跨距），檩距按雪压 0.35/0.65 kN/m² 分 1.2/1.0/0.8 m
+基础          按 Kt·M倾 反算混凝土方板（板厚≈边长/4，重度 24 kN/m³），上靠 50mm 模数
+抗倾覆        M稳/M倾 ≥ 1.6（M稳含结构自重、雪压重与基础自重，扣除风吸上拔）
+抗滑移        μ·竖向力合计/风水平力 ≥ 1.3（μ 按土类别取 0.30/0.40/0.50）
+```
+
+该模块只用于下料前的初估：体型系数与阵风系数取包络简化值，立柱/檩条未做长细比、节点与挠度验算，
+基础未做地基承载力与冲切验算，正式施工图应按地勘参数与 GB 50797/GB 50007 复核。
+
 **发电量**按首年发电量扣减首年衰减，此后按固定衰减率逐年递减：
 
 ```text
@@ -182,3 +203,4 @@ LCOE = (初始投资 + 周期运维费总额) / 周期总发电量（元/kWh）
 - 电气校核按「一台逆变器 + 若干路 MPPT」建模，暂不支持多台逆变器并联拓扑。
 - 排布按矩形规则阵列计算，不处理异形场地、避让区与多朝向混合布置。
 - 电缆校核按单路组串到逆变器的两极回路建模，不含汇流箱后的主干线、交流侧电缆与载流量/短路热稳定校核；电阻率统一按 90℃ 取值，未按实际环境温度逐档修正。
+- 支架与基础为初设包络估算：地面粗糙度固定 B 类、体型系数按倾角线性取包络值，未做立柱长细比/节点验算、檩条挠度验算、地基承载力与基础冲切/配筋验算，也不覆盖跟踪支架与桩基/螺旋地锚。
