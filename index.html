@@ -10,7 +10,7 @@
     <header class="topbar">
       <div>
         <h1>光伏电站设计与校核工作台</h1>
-        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 支架与基础选型 · 发电量估算 · 经济性分析</p>
+        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 支架与基础选型 · 防雷与接地设计 · 发电量估算 · 经济性分析</p>
       </div>
       <div id="api-status" class="status status--pending">接口检测中…</div>
     </header>
@@ -129,6 +129,32 @@
                   <option value="clay">黏性土（可塑，μ=0.30）</option>
                   <option value="silt" selected>粉土/砂土（稍湿，μ=0.40）</option>
                   <option value="gravel">碎石土/岩石（μ=0.50）</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>防雷与接地</legend>
+            <p class="fieldset-hint">
+              阵列外缘尺寸与排数复用上方「排布参数」的计算结果，间距口径改动时接地体数量同步变化；
+              土壤电阻率按现场实测（雨季最大值）取值，工作与保护接地 ≤4Ω、防雷接地 ≤10Ω。
+            </p>
+            <div class="field-row">
+              <label class="field">
+                <span>年平均雷暴日（d）</span>
+                <input id="thunder-days" type="number" min="0" max="200" step="1" value="30" />
+              </label>
+              <label class="field">
+                <span>土壤电阻率（Ω·m）</span>
+                <input id="soil-resistivity" type="number" min="1" max="5000" step="1" value="100" />
+              </label>
+              <label class="field">
+                <span>接地网形式</span>
+                <select id="grid-type">
+                  <option value="rods">垂直接地极（外缘分散布置）</option>
+                  <option value="ring" selected>水平环形接地网（外缘闭合环）</option>
+                  <option value="mesh">水平网格接地网（外缘 + 内部网格）</option>
                 </select>
               </label>
             </div>
@@ -257,6 +283,7 @@
         <article id="cable-panel" class="card" hidden></article>
         <article id="layout-panel" class="card" hidden></article>
         <article id="structure-panel" class="card" hidden></article>
+        <article id="grounding-panel" class="card" hidden></article>
         <article id="energy-panel" class="card" hidden></article>
         <article id="economics-panel" class="card" hidden></article>
       </section>

@@ -16,6 +16,7 @@ import { ENERGY_LIMITS, energyEstimate } from './src/yield.js';
 import { ECONOMICS_LIMITS, evaluateEconomics } from './src/economics.js';
 import { CABLE_LIMITS, evaluateCable, resolveMaterial } from './src/cable.js';
 import { STRUCTURE_LIMITS, evaluateStructure, resolveSoilType } from './src/structure.js';
+import { GROUNDING_LIMITS, evaluateGrounding, resolveGridType } from './src/grounding.js';
 import { readCatalog, writeCatalog } from './src/store.js';
 import { resolveFields } from './src/validate.js';
 
@@ -220,6 +221,65 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
     });
   }
 
+  async function handleGrounding(request, response) {
+    const body = await readJsonBody(request);
+    const catalog = await readCatalog(dataFile);
+    const module = pickModule(catalog, body.moduleId);
+    if (!module) throw badRequest(`未找到组件：${body.moduleId ?? '（空）'}`);
+
+    // 接地体数量要跟着阵列走：服务端先按排布口径重算阵列外缘与排数，
+    // 再喂给接地估算，避免前端另传一套占地尺寸造成分叉。
+    const { values, errors } = resolveFields(body, { ...GROUNDING_LIMITS, ...LAYOUT_LIMITS });
+    if (errors.length > 0) throw badRequest(errors.join('；'));
+
+    const shadingMode = resolveShadingMode(body.shadingMode ?? 'noon');
+    if (!shadingMode) {
+      throw badRequest(
+        `间距口径不支持：${String(body.shadingMode)}（仅支持 noon 冬至日正午 / window 冬至日 9:00–15:00）`
+      );
+    }
+
+    const gridSpec = resolveGridType(body.gridType ?? 'ring');
+    if (!gridSpec) {
+      throw badRequest(`接地网形式不支持：${String(body.gridType)}（仅支持 rods 垂直接地极 / ring 环形网 / mesh 网格网）`);
+    }
+
+    const plan = arrayPlan({
+      ...values,
+      shadingMode: shadingMode.id,
+      moduleLengthMm: module.lengthMm,
+      moduleWidthMm: module.widthMm,
+      pmax: module.pmax
+    });
+    if (plan.rows <= 0) {
+      throw badRequest('当前场地在选定间距口径下排不下任何阵列，无法估算接地体数量，请先调整排布参数');
+    }
+
+    const result = evaluateGrounding({
+      thunderDays: values.thunderDays,
+      soilResistivity: values.soilResistivity,
+      gridType: gridSpec.id,
+      widthM: plan.usedWidthMm / 1000,
+      depthM: plan.usedDepthMm / 1000,
+      rows: plan.rows
+    });
+    if (!result) throw badRequest('防雷接地参数不完整或取值非法，无法完成计算');
+
+    sendJson(response, 200, {
+      module: { id: module.id, brand: module.brand, model: module.model },
+      plan: {
+        modulesPerRow: plan.modulesPerRow,
+        rows: plan.rows,
+        totalModules: plan.totalModules,
+        capacityKw: plan.capacityKw,
+        usedWidthMm: plan.usedWidthMm,
+        usedDepthMm: plan.usedDepthMm,
+        shadingMode: plan.shadingMode
+      },
+      result
+    });
+  }
+
   async function handleCreate(request, response, kind) {
     const body = await readJsonBody(request);
     const catalog = await readCatalog(dataFile);
@@ -297,6 +357,11 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
 
     if (pathname === '/api/design/structure' && method === 'POST') {
       await handleStructure(request, response);
+      return true;
+    }
+
+    if (pathname === '/api/design/grounding' && method === 'POST') {
+      await handleGrounding(request, response);
       return true;
     }
 

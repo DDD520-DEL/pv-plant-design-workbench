@@ -5,6 +5,7 @@ import {
   postEconomics,
   postElectric,
   postEnergy,
+  postGrounding,
   postLayout,
   postStructure
 } from './api.js';
@@ -14,6 +15,7 @@ import { renderCablePanel } from './components/cable-panel.js';
 import { renderEconomicsPanel } from './components/economics-panel.js';
 import { renderElectricPanel } from './components/electric-panel.js';
 import { renderEnergyPanel } from './components/energy-panel.js';
+import { renderGroundingPanel } from './components/grounding-panel.js';
 import { renderLayoutPanel } from './components/layout-panel.js';
 import { renderStructurePanel } from './components/structure-panel.js';
 
@@ -37,6 +39,9 @@ const DEFAULT_VALUES = {
   modulesAlongSlope: 2,
   postSpacingMm: 2268,
   soilType: 'silt',
+  thunderDays: 30,
+  soilResistivity: 100,
+  gridType: 'ring',
   cableLengthM: 30,
   cableVoltage: 544.65,
   cableCurrent: 18.19,
@@ -73,6 +78,9 @@ const FIELDS = {
   modulesAlongSlope: 'modules-along-slope',
   postSpacing: 'post-spacing',
   soilType: 'soil-type',
+  thunderDays: 'thunder-days',
+  soilResistivity: 'soil-resistivity',
+  gridType: 'grid-type',
   cableLength: 'cable-length',
   cableVoltage: 'cable-voltage',
   cableCurrent: 'cable-current',
@@ -118,6 +126,7 @@ function cacheElements() {
     cable: document.getElementById('cable-panel'),
     layout: document.getElementById('layout-panel'),
     structure: document.getElementById('structure-panel'),
+    grounding: document.getElementById('grounding-panel'),
     energy: document.getElementById('energy-panel'),
     economics: document.getElementById('economics-panel')
   };
@@ -154,6 +163,9 @@ function applyDefaults() {
   elements.modulesAlongSlope.value = DEFAULT_VALUES.modulesAlongSlope;
   elements.postSpacing.value = DEFAULT_VALUES.postSpacingMm;
   elements.soilType.value = DEFAULT_VALUES.soilType;
+  elements.thunderDays.value = DEFAULT_VALUES.thunderDays;
+  elements.soilResistivity.value = DEFAULT_VALUES.soilResistivity;
+  elements.gridType.value = DEFAULT_VALUES.gridType;
   elements.cableLength.value = DEFAULT_VALUES.cableLengthM;
   elements.cableVoltage.value = DEFAULT_VALUES.cableVoltage;
   elements.cableCurrent.value = DEFAULT_VALUES.cableCurrent;
@@ -258,6 +270,9 @@ function collectInput() {
     modulesAlongSlope: numberValue(elements.modulesAlongSlope),
     postSpacingMm: numberValue(elements.postSpacing),
     soilType: elements.soilType.value,
+    thunderDays: numberValue(elements.thunderDays),
+    soilResistivity: numberValue(elements.soilResistivity),
+    gridType: elements.gridType.value,
     cableLengthM: numberValue(elements.cableLength),
     cableVoltageManual: optionalNumberValue(elements.cableVoltage),
     cableCurrentManual: optionalNumberValue(elements.cableCurrent),
@@ -291,9 +306,10 @@ async function runEvaluation() {
   setCableLinkNote(null);
 
   try {
-    // 电气校核、排布、支架基础互不依赖（支架倾角直接取输入值），三路并发；
+    // 电气校核、排布、支架基础、防雷接地互不依赖（均直接取输入值；
+    // 接地的阵列占地与排数由服务端按同一套排布参数重算），四路并发；
     // 电缆电压/电流要取自电气校核结果，必须等电气校核返回后再发。
-    const [electric, layout, structure] = await Promise.all([
+    const [electric, layout, structure, grounding] = await Promise.all([
       postElectric({
         moduleId: input.moduleId,
         inverterId: input.inverterId,
@@ -321,12 +337,25 @@ async function runEvaluation() {
         modulesAlongSlope: input.modulesAlongSlope,
         postSpacingMm: input.postSpacingMm,
         soilType: input.soilType
+      }),
+      postGrounding({
+        moduleId: input.moduleId,
+        shadingMode: input.shadingMode,
+        latitude: input.latitude,
+        tiltDeg: input.tiltDeg,
+        siteWidthMm: input.siteWidthMm,
+        siteDepthMm: input.siteDepthMm,
+        gapMm: input.gapMm,
+        thunderDays: input.thunderDays,
+        soilResistivity: input.soilResistivity,
+        gridType: input.gridType
       })
     ]);
 
     renderElectricPanel(elements.panels.electric, electric);
     renderLayoutPanel(elements.panels.layout, layout);
     renderStructurePanel(elements.panels.structure, structure);
+    renderGroundingPanel(elements.panels.grounding, grounding);
 
     const link = buildCableLink({
       metrics: electric.result.metrics,
@@ -367,7 +396,7 @@ async function runEvaluation() {
     });
     renderEconomicsPanel(elements.panels.economics, economics);
 
-    setLastResult({ electric, cable, layout, structure, energy, economics });
+    setLastResult({ electric, cable, layout, structure, grounding, energy, economics });
     const suffix = link.overrides.length > 0 ? ` 电缆电压/电流按手填值计算（${link.overrides.length} 项与电气校核不一致）。` : '';
     const paybackText =
       economics.result.paybackYears === null
@@ -377,9 +406,14 @@ async function runEvaluation() {
     const stabilityText = f.status === 'pass'
       ? `抗倾覆 ${f.checks.overturning.actual}、抗滑移 ${f.checks.sliding.actual} 均合格，基础建议 ${f.slab.sideMm}×${f.slab.sideMm}×${f.slab.thicknessMm} mm`
       : '支架基础稳定校核不满足，需加大基础或改用桩基础';
+    const g = grounding.result;
+    const groundingText = g.status === 'pass'
+      ? `接地电阻估算 ${g.design.resistanceOhm} Ω（${g.vertical.count} 根 ${g.vertical.specLabel} + ${g.horizontal.totalLengthM} m ${g.horizontal.specLabel}）满足 4 Ω / 10 Ω`
+      : `接地电阻估算 ${g.design.resistanceOhm} Ω 不满足 4 Ω，需换土/降阻剂等专项降阻`;
+    const hasWarning = link.overrides.length > 0 || f.status !== 'pass' || g.status !== 'pass';
     setMessage(
-      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW），${stabilityText}；${paybackText}，LCOE ${economics.result.lcoeYuanPerKwh} 元/kWh。${suffix}`,
-      link.overrides.length > 0 || f.status !== 'pass' ? 'warn' : 'ok'
+      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW），${stabilityText}；${groundingText}；${paybackText}，LCOE ${economics.result.lcoeYuanPerKwh} 元/kWh。${suffix}`,
+      hasWarning ? 'warn' : 'ok'
     );
   } catch (error) {
     hidePanels();

@@ -298,6 +298,107 @@ test('支架基础接口：土类别缺省按粉土砂土，未知组件/非法�
   });
 });
 
+test('防雷接地接口：按排布重算占地与排数，返回接地电阻与垂直接地极/水平带规格', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/grounding', {
+      moduleId: 'mod-620',
+      thunderDays: 30,
+      soilResistivity: 100,
+      gridType: 'ring',
+      latitude: 32,
+      tiltDeg: 25,
+      siteWidthMm: 50000,
+      siteDepthMm: 30000,
+      gapMm: 20
+    });
+
+    assert.equal(status, 200);
+    assert.equal(payload.plan.rows, 8);
+    assert.equal(payload.plan.totalModules, 344);
+    assert.ok(Math.abs(payload.plan.usedWidthMm / 1000 - 49.6) < 0.05);
+    assert.ok(Math.abs(payload.plan.usedDepthMm / 1000 - 27.5) < 0.05);
+
+    const { result } = payload;
+    assert.equal(result.status, 'pass');
+    assert.equal(result.environment.zone.id, 'normal');
+    assert.equal(result.vertical.specLabel, 'L50×5×2500');
+    assert.equal(result.vertical.count, 32);
+    assert.equal(result.horizontal.specLabel, '-40×4');
+    assert.equal(result.base.resistanceOhm, 0.82);
+    assert.equal(result.checks.working.limit, 4);
+    assert.equal(result.checks.lightning.limit, 10);
+    assert.equal(result.checks.working.pass, true);
+    assert.equal(result.checks.lightning.pass, true);
+  });
+});
+
+test('防雷接地接口：高电阻率时加密极数与内部均压带，仅满足 10Ω 判 fail', async () => {
+  await withServer(async (base) => {
+    const body = {
+      moduleId: 'mod-620',
+      thunderDays: 30,
+      latitude: 32,
+      tiltDeg: 25,
+      siteWidthMm: 50000,
+      siteDepthMm: 30000,
+      gapMm: 20
+    };
+    const dense = await post(base, '/api/design/grounding', { ...body, soilResistivity: 1000 });
+    assert.equal(dense.status, 200);
+    assert.equal(dense.payload.result.status, 'pass');
+    assert.equal(dense.payload.result.base.resistanceOhm, 8.23);
+    assert.ok(dense.payload.result.design.rodsAdded > 0);
+    assert.equal(dense.payload.result.design.innerGridsAdded, 4);
+
+    const extreme = await post(base, '/api/design/grounding', { ...body, soilResistivity: 3000 });
+    assert.equal(extreme.status, 200);
+    assert.equal(extreme.payload.result.status, 'fail');
+    assert.equal(extreme.payload.result.checks.working.pass, false);
+    assert.equal(extreme.payload.result.checks.lightning.pass, true);
+  });
+});
+
+test('防雷接地接口：默认值、网格形式与时段口径可用，非法入参与排布无解返回 400', async () => {
+  await withServer(async (base) => {
+    const defaults = await post(base, '/api/design/grounding', { moduleId: 'mod-620' });
+    assert.equal(defaults.status, 200);
+    assert.equal(defaults.payload.result.environment.thunderDays, 30);
+    assert.equal(defaults.payload.result.environment.soilResistivityOhmM, 100);
+    assert.equal(defaults.payload.result.gridType.id, 'ring');
+
+    const mesh = await post(base, '/api/design/grounding', {
+      moduleId: 'mod-620',
+      gridType: 'mesh',
+      shadingMode: 'window',
+      thunderDays: 60
+    });
+    assert.equal(mesh.status, 200);
+    assert.equal(mesh.payload.result.gridType.id, 'mesh');
+    assert.equal(mesh.payload.result.environment.zone.id, 'heavy');
+    assert.equal(mesh.payload.plan.shadingMode, 'window');
+    assert.equal(mesh.payload.plan.rows, 7);
+
+    const unknown = await post(base, '/api/design/grounding', { moduleId: 'mod-missing' });
+    assert.equal(unknown.status, 400);
+    assert.ok(unknown.payload.error.includes('未找到组件'));
+
+    const badGrid = await post(base, '/api/design/grounding', { moduleId: 'mod-620', gridType: 'star' });
+    assert.equal(badGrid.status, 400);
+    assert.ok(badGrid.payload.error.includes('接地网形式'));
+
+    const badRho = await post(base, '/api/design/grounding', { moduleId: 'mod-620', soilResistivity: 0 });
+    assert.equal(badRho.status, 400);
+    assert.ok(badRho.payload.error.includes('土壤电阻率'));
+
+    const noRows = await post(base, '/api/design/grounding', {
+      moduleId: 'mod-620',
+      siteDepthMm: 1000
+    });
+    assert.equal(noRows.status, 400);
+    assert.ok(noRows.payload.error.includes('排不下'));
+  });
+});
+
 test('发电量接口：按容量与衰减返回逐年结果', async () => {
   await withServer(async (base) => {
     const { status, payload } = await post(base, '/api/design/energy', {

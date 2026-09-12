@@ -45,3 +45,7 @@ export function postCable(body) {
 export function postStructure(body) {
   return request('/api/design/structure', { method: 'POST', body: JSON.stringify(body) });
 }
+
+export function postGrounding(body) {
+  return request('/api/design/grounding', { method: 'POST', body: JSON.stringify(body) });
+}
