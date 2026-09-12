@@ -206,6 +206,61 @@ test('发电量接口：按容量与衰减返回逐年结果', async () => {
   });
 });
 
+test('经济性接口：沿用发电量逐年结果返回现金流、回收期与 LCOE', async () => {
+  await withServer(async (base) => {
+    const { status, payload } = await post(base, '/api/design/economics', {
+      capacityKw: 100,
+      peakSunHours: 3.8,
+      performanceRatio: 0.8,
+      years: 25,
+      unitCostYuanPerW: 3.5,
+      omRatePercent: 1,
+      tariffYuanPerKwh: 0.35
+    });
+
+    assert.equal(status, 200);
+    // 服务端重算的发电量与发电量接口同口径
+    assert.equal(payload.estimate.firstYearKwh, 108740.8);
+    assert.equal(payload.estimate.annual.length, 25);
+
+    const { result } = payload;
+    assert.equal(result.initialInvestment, 350000);
+    assert.equal(result.annualOmCost, 3500);
+    // cashflow 含第 0 年投资行 + 25 个运营年
+    assert.equal(result.cashflow.length, 26);
+    assert.equal(result.cashflow[0].netCashflow, -350000);
+    assert.equal(result.cashflow[1].revenue, Math.round(108740.8 * 0.35 * 100) / 100);
+    assert.ok(result.paybackYears > 10 && result.paybackYears < 12);
+    assert.ok(result.lcoeYuanPerKwh > 0.16 && result.lcoeYuanPerKwh < 0.18);
+    assert.ok(result.totalNetCashflow > 0);
+  });
+});
+
+test('经济性接口：经济性参数缺省时走默认值，越界返回 400', async () => {
+  await withServer(async (base) => {
+    const defaults = await post(base, '/api/design/economics', { capacityKw: 100 });
+    assert.equal(defaults.status, 200);
+    assert.equal(defaults.payload.result.unitCostYuanPerW, 3.5);
+    assert.equal(defaults.payload.result.omRatePercent, 1);
+    assert.equal(defaults.payload.result.tariffYuanPerKwh, 0.35);
+    assert.equal(defaults.payload.estimate.annual.length, 25);
+
+    const badCost = await post(base, '/api/design/economics', {
+      capacityKw: 100,
+      unitCostYuanPerW: 0
+    });
+    assert.equal(badCost.status, 400);
+    assert.ok(badCost.payload.error.includes('单位造价'));
+
+    const badTariff = await post(base, '/api/design/economics', {
+      capacityKw: 100,
+      tariffYuanPerKwh: 100
+    });
+    assert.equal(badTariff.status, 400);
+    assert.ok(badTariff.payload.error.includes('上网电价'));
+  });
+});
+
 test('自定义组件可以新增、出现在目录中并被删除', async () => {
   await withServer(async (base) => {
     const created = await post(base, '/api/catalog/modules', {

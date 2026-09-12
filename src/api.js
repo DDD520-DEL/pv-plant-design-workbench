@@ -34,6 +34,10 @@ export function postEnergy(body) {
   return request('/api/design/energy', { method: 'POST', body: JSON.stringify(body) });
 }
 
+export function postEconomics(body) {
+  return request('/api/design/economics', { method: 'POST', body: JSON.stringify(body) });
+}
+
 export function postCable(body) {
   return request('/api/design/cable', { method: 'POST', body: JSON.stringify(body) });
 }

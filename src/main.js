@@ -1,7 +1,16 @@
-import { fetchCatalog, fetchHealth, postCable, postElectric, postEnergy, postLayout } from './api.js';
+import {
+  fetchCatalog,
+  fetchHealth,
+  postCable,
+  postEconomics,
+  postElectric,
+  postEnergy,
+  postLayout
+} from './api.js';
 import { setCatalog, setLastResult } from './state.js';
 import { buildCableLink, formatLinkedValue } from './cable-link.js';
 import { renderCablePanel } from './components/cable-panel.js';
+import { renderEconomicsPanel } from './components/economics-panel.js';
 import { renderElectricPanel } from './components/electric-panel.js';
 import { renderEnergyPanel } from './components/energy-panel.js';
 import { renderLayoutPanel } from './components/layout-panel.js';
@@ -29,7 +38,10 @@ const DEFAULT_VALUES = {
   performanceRatio: 0.8,
   years: 25,
   firstYearDegradation: 2,
-  annualDegradation: 0.55
+  annualDegradation: 0.55,
+  unitCostYuanPerW: 3.5,
+  omRatePercent: 1,
+  tariffYuanPerKwh: 0.35
 };
 
 const FIELDS = {
@@ -55,7 +67,10 @@ const FIELDS = {
   performanceRatio: 'performance-ratio',
   years: 'years',
   firstYearDegradation: 'first-year-degradation',
-  annualDegradation: 'annual-degradation'
+  annualDegradation: 'annual-degradation',
+  unitCost: 'unit-cost',
+  omRate: 'om-rate',
+  tariff: 'tariff'
 };
 
 const elements = {};
@@ -86,7 +101,8 @@ function cacheElements() {
     electric: document.getElementById('electric-panel'),
     cable: document.getElementById('cable-panel'),
     layout: document.getElementById('layout-panel'),
-    energy: document.getElementById('energy-panel')
+    energy: document.getElementById('energy-panel'),
+    economics: document.getElementById('economics-panel')
   };
 }
 
@@ -125,6 +141,9 @@ function applyDefaults() {
   elements.years.value = DEFAULT_VALUES.years;
   elements.firstYearDegradation.value = DEFAULT_VALUES.firstYearDegradation;
   elements.annualDegradation.value = DEFAULT_VALUES.annualDegradation;
+  elements.unitCost.value = DEFAULT_VALUES.unitCostYuanPerW;
+  elements.omRate.value = DEFAULT_VALUES.omRatePercent;
+  elements.tariff.value = DEFAULT_VALUES.tariffYuanPerKwh;
   resetCableLink();
 }
 
@@ -218,7 +237,10 @@ function collectInput() {
     performanceRatio: numberValue(elements.performanceRatio),
     years: numberValue(elements.years),
     firstYearDegradation: numberValue(elements.firstYearDegradation),
-    annualDegradation: numberValue(elements.annualDegradation)
+    annualDegradation: numberValue(elements.annualDegradation),
+    unitCostYuanPerW: numberValue(elements.unitCost),
+    omRatePercent: numberValue(elements.omRate),
+    tariffYuanPerKwh: numberValue(elements.tariff)
   };
 }
 
@@ -281,20 +303,35 @@ async function runEvaluation() {
     renderCablePanel(elements.panels.cable, cable, { link });
 
     const capacityKw = layout.plan.capacityKw > 0 ? layout.plan.capacityKw : electric.result.metrics.dcKw;
-    const energy = await postEnergy({
+    const energyBody = {
       capacityKw,
       peakSunHours: input.peakSunHours,
       performanceRatio: input.performanceRatio,
       years: input.years,
       firstYearDegradation: input.firstYearDegradation,
       annualDegradation: input.annualDegradation
-    });
+    };
+    const energy = await postEnergy(energyBody);
     renderEnergyPanel(elements.panels.energy, energy);
 
-    setLastResult({ electric, cable, layout, energy });
+    // 经济性复用同一套发电量参数（服务端重算逐年发电量，口径与发电量卡片一致），
+    // 再叠加单位造价、运维费率与上网电价。
+    const economics = await postEconomics({
+      ...energyBody,
+      unitCostYuanPerW: input.unitCostYuanPerW,
+      omRatePercent: input.omRatePercent,
+      tariffYuanPerKwh: input.tariffYuanPerKwh
+    });
+    renderEconomicsPanel(elements.panels.economics, economics);
+
+    setLastResult({ electric, cable, layout, energy, economics });
     const suffix = link.overrides.length > 0 ? ` 电缆电压/电流按手填值计算（${link.overrides.length} 项与电气校核不一致）。` : '';
+    const paybackText =
+      economics.result.paybackYears === null
+        ? `${input.years} 年内未回本`
+        : `静态回收期 ${economics.result.paybackYears} 年`;
     setMessage(
-      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW）。${suffix}`,
+      `校核完成：电气侧共 ${electric.result.checks.length} 项判定，电缆压降 ${cable.result.dropPercent}%，阵列可装 ${layout.plan.totalModules} 块（${layout.plan.capacityKw} kW），${paybackText}，LCOE ${economics.result.lcoeYuanPerKwh} 元/kWh。${suffix}`,
       link.overrides.length > 0 ? 'warn' : 'ok'
     );
   } catch (error) {

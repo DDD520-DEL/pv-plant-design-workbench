@@ -1,7 +1,7 @@
 # 光伏电站设计与校核工作台
 
 一个前后端一体的光伏电站设计辅助工具：组串电气校核、直流电缆选型与压降校核、阵列排布与阴影间距计算、
-发电量估算，配上可扩展的组件库与逆变器库。
+发电量估算与经济性分析（逐年现金流、静态回收期、平准化度电成本），配上可扩展的组件库与逆变器库。
 
 项目**不依赖任何第三方 npm 包**，全部使用 Node 内置能力（`node:http`、`node:fs`、`node:test`），
 clone 后即可直接运行和测试。
@@ -28,8 +28,9 @@ npm test
 - `test/cable.test.js`：回路电阻、直流压降与线损、2%/3% 两档判定、截面反推与标准规格上靠
 - `test/layout.test.js`：冬至日太阳高度角、阴影长度、排距、场地排布与容量
 - `test/yield.test.js`：首年发电量、逐年衰减、总发电量与等效利用小时
+- `test/economics.test.js`：初始投资、逐年净现金流、静态回收期插值、未回本、静态 LCOE
 - `test/catalog.test.js`：自定义库读写、组件与逆变器字段校验
-- `test/api.test.js`：启动真实 HTTP 服务，验证健康检查、目录增删、四类设计计算与错误处理
+- `test/api.test.js`：启动真实 HTTP 服务，验证健康检查、目录增删、五类设计计算与错误处理
 
 ## 目录结构
 
@@ -42,6 +43,7 @@ src/cable-link.js       电气校核 → 电缆电压/电流联动（自动跟�
 src/cable.js            直流电缆压降、线损与截面反推
 src/layout.js           阵列排布与阴影间距
 src/yield.js            发电量估算
+src/economics.js        经济性分析（逐年现金流、静态回收期、LCOE）
 src/catalogs.js         内置组件库与逆变器库
 src/catalog-schema.js   自定义条目的字段口径
 src/store.js            自定义库持久化
@@ -67,6 +69,7 @@ test/                   单元测试与接口测试
 | POST | `/api/design/electric` | 组串电气校核，body 为 `{ moduleId, inverterId, seriesPerString, stringsPerMppt, mpptUsed, minCellTemp, maxCellTemp }` |
 | POST | `/api/design/layout` | 阵列排布与阴影间距，body 为 `{ moduleId, latitude, tiltDeg, siteWidthMm, siteDepthMm, gapMm }` |
 | POST | `/api/design/energy` | 发电量估算，body 为 `{ capacityKw, peakSunHours, performanceRatio, years, firstYearDegradation, annualDegradation }` |
+| POST | `/api/design/economics` | 经济性分析，body 为发电量参数再加 `{ unitCostYuanPerW, omRatePercent, tariffYuanPerKwh }`，服务端按同一口径重算逐年发电量，返回现金流、静态回收期与 LCOE |
 | POST | `/api/design/cable` | 直流电缆选型，body 为 `{ cableLengthM, stringVoltage, stringCurrent, conductorMaterial, conductorArea, allowedDropPercent }`，材质取 `cu`/`al`，缺省铜芯 |
 
 所有 POST 接口在参数缺失时按默认值处理，参数越界、组件或逆变器不存在、使用路数超过 MPPT 路数等情况返回 `400` 与中文错误说明。
@@ -129,6 +132,20 @@ E1 = 装机容量 × 峰值日照小时数 × 365 × PR × (1 − 首年衰减)
 En = E1 × (1 − 逐年衰减)^(n−1)
 ```
 
+**经济性分析**直接取发电量估算的逐年结果，投资在第 0 年一次性发生，全周期不考虑资金时间价值（静态口径）：
+
+```text
+初始投资 = 装机容量(kW) × 1000 × 单位造价(元/W)
+年运维费 = 初始投资 × 年运维费率
+年净现金流 = 当年发电量 × 上网电价 − 年运维费
+静态回收期 = 累计净现金流首次回正的年份（回正年内按净现金流比例插值）
+LCOE = (初始投资 + 周期运维费总额) / 周期总发电量（元/kWh）
+```
+
+默认参数：单位造价 3.5 元/W、年运维费率 1%、上网电价 0.35 元/kWh；允许范围分别为
+0.1–50 元/W、0–20%、0.01–5 元/kWh。测算年限内累计净现金流始终为负时回收期显示「未回本」，
+此时 LCOE 高于电价的情况会在结果卡片顶部提示。
+
 ## 自定义库
 
 页面下拉框里的条目来自内置库加 `data/catalog.json`。通过 `POST /api/catalog/modules`
@@ -146,6 +163,7 @@ En = E1 × (1 − 逐年衰减)^(n−1)
 
 - 阴影计算只覆盖冬至日正午时刻，尚未支持 9:00–15:00 时段不遮挡、地形起伏与周边遮挡物。
 - 发电量估算使用单一峰值日照小时数与系统效率，不区分逐时辐照、温度损失与光谱修正。
+- 经济性为静态口径：不折现、不含税费、融资成本、保险与残值，运维费按初投固定费率取值，未考虑逆变器更换等大额中修支出。
 - 电气校核按「一台逆变器 + 若干路 MPPT」建模，暂不支持多台逆变器并联拓扑。
 - 排布按矩形规则阵列计算，不处理异形场地、避让区与多朝向混合布置。
 - 电缆校核按单路组串到逆变器的两极回路建模，不含汇流箱后的主干线、交流侧电缆与载流量/短路热稳定校核；电阻率统一按 90℃ 取值，未按实际环境温度逐档修正。

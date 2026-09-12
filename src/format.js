@@ -21,6 +21,12 @@ export function formatEnergy(kwh) {
   return `${formatNumber(kwh, 1)} kWh`;
 }
 
+export function formatMoney(yuan) {
+  if (!Number.isFinite(yuan)) return '—';
+  if (Math.abs(yuan) >= 10000) return `${formatNumber(yuan / 10000, 2)} 万元`;
+  return `${formatNumber(yuan, 0)} 元`;
+}
+
 export function formatPercent(ratio, digits = 1) {
   if (!Number.isFinite(ratio)) return '—';
   return `${formatNumber(ratio * 100, digits)}%`;

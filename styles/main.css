@@ -421,6 +421,14 @@ input.input--mismatch {
   background: #fffbf3;
 }
 
+.money-negative {
+  color: var(--fail);
+}
+
+.money-positive {
+  color: var(--ok);
+}
+
 .tag {
   display: inline-block;
   padding: 2px 8px;

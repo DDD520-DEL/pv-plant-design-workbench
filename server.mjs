@@ -13,6 +13,7 @@ import { normalizeInverter, normalizeModule } from './src/catalog-schema.js';
 import { CELL_TEMP_LIMITS, STRING_LIMITS, evaluateElectric } from './src/pv-math.js';
 import { LAYOUT_LIMITS, arrayPlan } from './src/layout.js';
 import { ENERGY_LIMITS, energyEstimate } from './src/yield.js';
+import { ECONOMICS_LIMITS, evaluateEconomics } from './src/economics.js';
 import { CABLE_LIMITS, evaluateCable, resolveMaterial } from './src/cable.js';
 import { readCatalog, writeCatalog } from './src/store.js';
 import { resolveFields } from './src/validate.js';
@@ -149,6 +150,25 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
     sendJson(response, 200, { estimate: energyEstimate(values) });
   }
 
+  async function handleEconomics(request, response) {
+    const body = await readJsonBody(request);
+    // 容量、辐照、PR、年限、衰减与发电量接口同一套口径，
+    // 服务端先重算逐年发电量，再喂给经济性分析，避免两侧结果分叉。
+    const specs = { ...ENERGY_LIMITS, ...ECONOMICS_LIMITS };
+    const { values, errors } = resolveFields(body, specs);
+    if (errors.length > 0) throw badRequest(errors.join('；'));
+
+    const estimate = energyEstimate(values);
+    const result = evaluateEconomics({
+      capacityKw: values.capacityKw,
+      unitCostYuanPerW: values.unitCostYuanPerW,
+      omRatePercent: values.omRatePercent,
+      tariffYuanPerKwh: values.tariffYuanPerKwh,
+      annual: estimate.annual
+    });
+    sendJson(response, 200, { estimate, result });
+  }
+
   async function handleCable(request, response) {
     const body = await readJsonBody(request);
     const { values, errors } = resolveFields(body, CABLE_LIMITS);
@@ -226,6 +246,11 @@ export function createApp({ dataFile = defaultDataFile } = {}) {
 
     if (pathname === '/api/design/energy' && method === 'POST') {
       await handleEnergy(request, response);
+      return true;
+    }
+
+    if (pathname === '/api/design/economics' && method === 'POST') {
+      await handleEconomics(request, response);
       return true;
     }
 

@@ -10,7 +10,7 @@
     <header class="topbar">
       <div>
         <h1>光伏电站设计与校核工作台</h1>
-        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 发电量估算</p>
+        <p class="subtitle">组串电气校核 · 直流电缆选型 · 阵列排布间距 · 发电量估算 · 经济性分析</p>
       </div>
       <div id="api-status" class="status status--pending">接口检测中…</div>
     </header>
@@ -174,6 +174,27 @@
               </label>
             </div>
           </fieldset>
+
+          <fieldset>
+            <legend>经济性参数</legend>
+            <p class="fieldset-hint">
+              装机容量与逐年发电量直接沿用上方发电量估算结果，无需重复填写；测算年限改动时发电量与经济性同步。
+            </p>
+            <div class="field-row">
+              <label class="field">
+                <span>单位造价（元/W）</span>
+                <input id="unit-cost" type="number" min="0.1" max="50" step="0.05" value="3.5" />
+              </label>
+              <label class="field">
+                <span>年运维费率（% 初投/年）</span>
+                <input id="om-rate" type="number" min="0" max="20" step="0.1" value="1" />
+              </label>
+              <label class="field">
+                <span>上网电价（元/kWh）</span>
+                <input id="tariff" type="number" min="0.01" max="5" step="0.01" value="0.35" />
+              </label>
+            </div>
+          </fieldset>
         </form>
 
         <div class="actions">
@@ -189,6 +210,7 @@
         <article id="cable-panel" class="card" hidden></article>
         <article id="layout-panel" class="card" hidden></article>
         <article id="energy-panel" class="card" hidden></article>
+        <article id="economics-panel" class="card" hidden></article>
       </section>
     </main>
 
